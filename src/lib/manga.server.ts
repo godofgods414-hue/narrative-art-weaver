@@ -709,6 +709,11 @@ const STYLE_TRIGGERS: [RegExp, string][] = [
     "",
   ],
   [/\b(4k|8k|hdr|ultra[- ]detailed|highly detailed render|trending on artstation|artstation)\b/gi, ""],
+  // Photographic camera/lens/skin cues drag Flux back to its default photo look.
+  [
+    /\b(shallow depth of field|depth of field|telephoto|wide[- ]angle lens|macro lens|studio lighting|softbox|golden hour photo|candid|documentary|editorial|portrait photo|headshot|skin pores|subsurface scattering|ray[- ]?traced|volumetric lighting|lens flare|chromatic aberration|motion blur|long exposure|real[- ]life|true colour photo)\b,?\s*/gi,
+    "",
+  ],
 ];
 
 /** Removes phrasing that makes the model draw a sheet/portrait, text, or a dark mood grade. */
@@ -932,8 +937,8 @@ export function hasPeople(prompt: string, bible?: string): boolean {
  * So: the STORY MOMENT goes first and always fits, then a compact style and
  * the shortest possible guards, and the whole thing is kept inside the budget.
  */
-const IMAGE_PROMPT_BUDGET = 1000;
-const SCENE_BUDGET = 620;
+const IMAGE_PROMPT_BUDGET = 1250;
+const SCENE_BUDGET = 470;
 const LOCK_BUDGET = 150;
 
 /** Trims to a length without cutting mid-word. */
@@ -945,11 +950,22 @@ function clip(s: string, max: number): string {
   return cut.slice(0, stop > max * 0.6 ? stop : max).replace(/[\s,.;-]+$/, "");
 }
 
-/** Compact renderer-side art direction (the full STYLE block does not fit). */
-const STYLE_SHORT =
-  "polished 2D Japanese anime frame, crisp ink linework, clean cel shading, painted anime background, vivid colours, " +
-  "fully finished production artwork, every part of the frame completely drawn and coloured edge to edge, no unfinished sketch areas, no blank or empty patches";
+/**
+ * Compact renderer-side art direction.
+ *
+ * Flux weights its opening tokens most heavily, and its untouched default look
+ * is photographic — which is exactly why some panels came back looking like
+ * photos even though the style clause was present later in the prompt. So the
+ * anime declaration now OPENS the prompt (concrete, drawing-specific nouns the
+ * model can only satisfy with 2D artwork) and is restated compactly at the end.
+ */
+const STYLE_LEAD =
+  "2D hand-drawn Japanese anime animation frame, cel-shaded anime artwork, crisp uniform ink outlines, " +
+  "flat anime colour fills, large expressive anime eyes and stylised anime faces, hand-painted anime background";
 
+const STYLE_TAIL =
+  "anime cel animation still, drawn ink lines and flat cel colour throughout, " +
+  "fully finished production artwork drawn and coloured edge to edge, no unfinished patches";
 
 export function composeImagePrompt(prompt: string, bible?: string): string {
   const fixed = enforceGender(sanitizePrompt(prompt), bible);
@@ -957,16 +973,18 @@ export function composeImagePrompt(prompt: string, bible?: string): string {
   // Character lock only matters when someone is actually in frame.
   const lock = peopled ? clip(characterLock(fixed, bible), LOCK_BUDGET) : "";
 
-  // Scene FIRST: it is the only part that must never be lost to truncation.
+  // Style FIRST (Flux's default look is photographic), then the scene, which
+  // is still protected by its own budget so it can never be lost.
   const parts = [
+    STYLE_LEAD,
     `THIS EXACT STORY MOMENT: ${clip(fixed, SCENE_BUDGET)}`,
     lock,
-    STYLE_SHORT,
     peopled
       ? "only the described people, each drawn once, whole separate bodies"
       : "empty environment, no people in frame",
     "natural clear lighting, wordless artwork with no text or signage",
-    "one single 16:9 widescreen illustration of this one moment",
+    STYLE_TAIL,
+    "one single 16:9 widescreen anime illustration of this one moment",
   ].filter(Boolean);
 
   return clip(
@@ -977,6 +995,7 @@ export function composeImagePrompt(prompt: string, bible?: string): string {
     IMAGE_PROMPT_BUDGET,
   );
 }
+
 
 /**
  * Blank-panel rejection.
