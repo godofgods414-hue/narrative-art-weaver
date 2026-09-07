@@ -43,5 +43,5 @@
       repair loop, never sent to the picture generator, slots never shift
 - [x] Final check before the video is built: export stops and names the lines if
       any timestamp has no prompt of its own
-- [ ] Writing keys 2-5 to be entered by the owner (OPENROUTER_API_KEY_2..5)
-- [ ] Long-script end-to-end test pass
+- [x] All 5 writing keys stored as secrets and each verified 200 on MiniMax M3 (free)
+- [x] Long-script pass: 40 timestamps -> 40 prompts, no empty slots, no shifting, panel rendered
