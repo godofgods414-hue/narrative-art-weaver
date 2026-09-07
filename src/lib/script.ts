@@ -170,13 +170,20 @@ export function parseScript(raw: string): Segment[] {
       push(a.time, b.time, text);
     }
 
-    // Trailing text after the last timestamp (script may end without a closing mark)
+    // Trailing text after the last timestamp (script may end without a closing mark).
+    // A range mark carries its own end time, so use that rather than an estimate.
     const last = marks[marks.length - 1]!;
     const tail = raw
       .slice(last.at + last.len)
       .replace(/\s+/g, " ")
       .trim();
-    if (tail) push(last.time, last.time + estimateSpeech(tail), tail);
+    if (tail) {
+      const tailEnd =
+        last.endTime !== null && last.endTime > last.time
+          ? last.endTime
+          : last.time + estimateSpeech(tail);
+      push(last.time, tailEnd, tail);
+    }
   }
 
   // NOTHING is merged: every timestamp span keeps its own segment, so the run
