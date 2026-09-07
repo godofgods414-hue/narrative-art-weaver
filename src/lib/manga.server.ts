@@ -709,6 +709,11 @@ const STYLE_TRIGGERS: [RegExp, string][] = [
     "",
   ],
   [/\b(4k|8k|hdr|ultra[- ]detailed|highly detailed render|trending on artstation|artstation)\b/gi, ""],
+  // Photographic camera/lens/skin cues drag Flux back to its default photo look.
+  [
+    /\b(shallow depth of field|depth of field|telephoto|wide[- ]angle lens|macro lens|studio lighting|softbox|golden hour photo|candid|documentary|editorial|portrait photo|headshot|skin pores|subsurface scattering|ray[- ]?traced|volumetric lighting|lens flare|chromatic aberration|motion blur|long exposure|real[- ]life|true colour photo)\b,?\s*/gi,
+    "",
+  ],
 ];
 
 /** Removes phrasing that makes the model draw a sheet/portrait, text, or a dark mood grade. */
@@ -932,8 +937,8 @@ export function hasPeople(prompt: string, bible?: string): boolean {
  * So: the STORY MOMENT goes first and always fits, then a compact style and
  * the shortest possible guards, and the whole thing is kept inside the budget.
  */
-const IMAGE_PROMPT_BUDGET = 1000;
-const SCENE_BUDGET = 620;
+const IMAGE_PROMPT_BUDGET = 1250;
+const SCENE_BUDGET = 470;
 const LOCK_BUDGET = 150;
 
 /** Trims to a length without cutting mid-word. */
