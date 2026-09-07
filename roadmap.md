@@ -20,7 +20,7 @@
       check run immediately before every image request; a prompt whose setting,
       subject or action is not that line's own moment is rewritten for that exact
       line and the rewrite is what gets drawn
-- [ ] Blocked: all 5 OpenRouter keys return 401 "User not found" — new keys needed
+- [x] Writing key 1 verified working again on MiniMax M3 (free)
 
 ## Done
 - [x] Confirmed the text service allows 5 requests/min PER KEY (not 60) — 7 keys = 35/min total
@@ -35,3 +35,13 @@
 - [x] 4 image keys + 5 writing keys stored as secrets; all 5 writing keys verified 200 on MiniMax M3 (free)
 - [ ] End-to-end pass with the sample chapter: first panels must visually match 0:05-0:35
 - [ ] Verify continuation spans (no text between two marks) draw their own moment, not a distant scene
+
+## Cloned into this project (2026-09-07, tale-tuner-studio)
+- [x] Repo cloned and running here; 4 image keys stored as secrets (never in code)
+- [x] Writing key 1 stored as a secret and verified 200 on MiniMax M3 (free)
+- [x] Player page: an empty prompt now counts as "still missing" — kept in the
+      repair loop, never sent to the picture generator, slots never shift
+- [x] Final check before the video is built: export stops and names the lines if
+      any timestamp has no prompt of its own
+- [ ] Writing keys 2-5 to be entered by the owner (OPENROUTER_API_KEY_2..5)
+- [ ] Long-script end-to-end test pass
