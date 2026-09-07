@@ -501,10 +501,13 @@ function Index() {
       await saveProgress(key, { bible: b, shots: list });
       setPhase("done");
       const bad = list.filter((s) => !s.url).length;
+      const noPrompt = missingPromptLines(list).length;
       setNote(
-        bad
-          ? `${list.length - bad}/${list.length} panels ready · ${bad} failed`
-          : "All panels generated.",
+        bad || noPrompt
+          ? `${list.length - bad}/${list.length} panels ready · ${bad} failed${
+              noPrompt ? ` · ${noPrompt} without a prompt` : ""
+            }`
+          : "All panels generated · every timestamp has its own prompt.",
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -678,6 +681,19 @@ function Index() {
 
     // Every script timestamp becomes a panel. Panels whose image failed reuse a
     // neighbour's image instead of vanishing, so the runtime always matches.
+    // Final coverage check: no timestamp may reach the video without its own
+    // prompt. A missing prompt means that panel was never really drawn for its
+    // moment, so the export stops and points at the exact lines to repair.
+    const gaps = missingPromptLines(shotsRef.current);
+    if (gaps.length > 0) {
+      setError(
+        `${gaps.length} timestamp(s) still have no prompt of their own (line${
+          gaps.length > 1 ? "s" : ""
+        } ${gaps.slice(0, 12).join(", ")}${gaps.length > 12 ? "…" : ""}). Press "Retry failed panels" so every moment gets its own picture before exporting.`,
+      );
+      return;
+    }
+
     const timeline = buildTimeline(shotsRef.current, scriptEndTime(script));
 
     if (timeline.panels.length === 0) {
@@ -743,6 +759,19 @@ function Index() {
     setSavedTo(null);
     setVideoUrl(null);
     setDownloadUrl(null);
+
+    // Final coverage check: no timestamp may reach the video without its own
+    // prompt. A missing prompt means that panel was never really drawn for its
+    // moment, so the export stops and points at the exact lines to repair.
+    const gaps = missingPromptLines(shotsRef.current);
+    if (gaps.length > 0) {
+      setError(
+        `${gaps.length} timestamp(s) still have no prompt of their own (line${
+          gaps.length > 1 ? "s" : ""
+        } ${gaps.slice(0, 12).join(", ")}${gaps.length > 12 ? "…" : ""}). Press "Retry failed panels" so every moment gets its own picture before exporting.`,
+      );
+      return;
+    }
 
     const timeline = buildTimeline(shotsRef.current, scriptEndTime(script));
     const ready = timeline.panels;
