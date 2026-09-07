@@ -91,7 +91,7 @@ function estimateSpeech(text: string): number {
 }
 
 export function parseScript(raw: string): Segment[] {
-  const marks: { at: number; time: number; len: number }[] = [];
+  const marks: { at: number; time: number; len: number; endTime: number | null }[] = [];
   TS.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TS.exec(raw)) !== null) {
@@ -102,7 +102,7 @@ export function parseScript(raw: string): Segment[] {
     // A bare timestamp match may include the separator that preceded it; keep
     // that character with the previous segment's text.
     const lead = m[1] === undefined && /^[\s—–-]/.test(m[0]) ? 1 : 0;
-    marks.push({ at: m.index + lead, time, len: m[0].length - lead });
+    marks.push({ at: m.index + lead, time, len: m[0].length - lead, endTime: toEndSeconds(m) });
   }
   if (marks.length === 0) return [];
 
