@@ -250,7 +250,7 @@ function Index() {
       // because the text engine uses a single key at a time.
       // Stage 2 drains a shared queue as soon as prompts land, so image
       // rendering starts within seconds instead of after the last pass.
-      const needPrompts = pending.filter((s) => !s.prompt);
+      const needPrompts = pending.filter((s) => !hasPrompt(s.prompt));
       const ranges: { from: number; to: number }[] = [];
       for (let i = 0; i < needPrompts.length; i += PROMPT_RANGE) {
         const slice = needPrompts.slice(i, i + PROMPT_RANGE);
@@ -273,9 +273,10 @@ function Index() {
 
       let keyTick = 0;
       type Job = { seg: Shot; prompt: string; attempts: number };
+      // Only lines that actually HAVE a prompt may enter the render queue.
       const queue: Job[] = pending
-        .filter((s) => s.prompt && !s.url)
-        .map((s) => ({ seg: s, prompt: s.prompt as string, attempts: 0 }));
+        .filter((s) => hasPrompt(s.prompt) && !s.url)
+        .map((s) => ({ seg: s, prompt: (s.prompt as string).trim(), attempts: 0 }));
 
       /**
        * One timestamp = one image, in any condition: a failed panel is pushed
@@ -311,7 +312,7 @@ function Index() {
         for (const range of ranges) {
           if (cancelRef.current) break;
           const targets = list.filter(
-            (s) => s.index + 1 >= range.from && s.index + 1 <= range.to && !s.prompt,
+            (s) => s.index + 1 >= range.from && s.index + 1 <= range.to && !hasPrompt(s.prompt),
           );
           if (targets.length === 0) continue;
           targets.forEach((s) => record(s.index, { status: "prompting" }));
@@ -326,11 +327,15 @@ function Index() {
             });
             const prompts = res.prompts as string[];
             targets.forEach((s) => {
-              const prompt = prompts[s.index + 1 - range.from];
-              if (!prompt) {
-                record(s.index, { status: "error", error: "no prompt" });
+              // Slot-aligned: prompts[i] belongs to this exact line number. An
+              // empty slot stays empty (never inherits a neighbour's prompt) and
+              // is picked up again by the repair sweep below.
+              const slot = prompts[s.index + 1 - range.from];
+              if (!hasPrompt(slot)) {
+                record(s.index, { prompt: undefined, status: "error", error: "prompt missing" });
                 return;
               }
+              const prompt = (slot as string).trim();
               record(s.index, { prompt, status: "waiting" });
               queue.push({ seg: s as Shot, prompt, attempts: 0 });
             });
@@ -345,9 +350,9 @@ function Index() {
         // Repair sweep: one timestamp = one image, in any condition. Any line
         // that still has no prompt (model skipped it, or the pass failed) is
         // asked for again in small groups until every line has one.
-        for (let round = 0; round < 3; round++) {
+        for (let round = 0; round < 5; round++) {
           if (cancelRef.current) break;
-          const missing = list.filter((s) => !s.prompt);
+          const missing = list.filter((s) => !hasPrompt(s.prompt));
           if (missing.length === 0) break;
           // One line per request: a mixed, non-contiguous group is exactly how a
           // prompt written for another timestamp landed on this panel.
@@ -359,15 +364,16 @@ function Index() {
               const res = await getPrompts({
                 data: { bible: b, from: num, to: num, segments: allSegments },
               });
-              const prompt = (res.prompts as string[])[0];
-              if (prompt) {
+              const slot = (res.prompts as string[])[0];
+              if (hasPrompt(slot)) {
+                const prompt = (slot as string).trim();
                 record(s.index, { prompt, status: "waiting", error: undefined });
                 queue.push({ seg: s as Shot, prompt, attempts: 0 });
               } else {
-                record(s.index, { status: "error", error: "no prompt" });
+                record(s.index, { prompt: undefined, status: "error", error: "prompt missing" });
               }
             } catch {
-              record(s.index, { status: "error", error: "no prompt" });
+              record(s.index, { prompt: undefined, status: "error", error: "prompt missing" });
             }
             tick();
           }
@@ -523,7 +529,7 @@ function Index() {
       record: (i: number, next: Partial<Shot>) => void,
       slotBase: number,
     ): Promise<boolean> => {
-      let prompt = shot.prompt;
+      let prompt = hasPrompt(shot.prompt) ? (shot.prompt as string).trim() : undefined;
       if (!prompt) {
         record(shot.index, { status: "prompting", error: undefined });
         try {
@@ -540,7 +546,8 @@ function Index() {
               })),
             },
           });
-          prompt = prompts[0] as string | undefined;
+          const slot = prompts[0] as string | undefined;
+          prompt = hasPrompt(slot) ? (slot as string).trim() : undefined;
         } catch {
           prompt = undefined;
         }
