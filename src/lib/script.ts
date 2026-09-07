@@ -9,8 +9,15 @@ export type Segment = {
 // MM:SS past 99 minutes (for example 120:19), as well as using HH:MM:SS.
 // Brackets are optional and may be any common style — (0:05), [0:05], 【0:05】,
 // or a bare 0:05 at the start of a line — so real-world scripts all parse.
-const TS =
-  /[(\[{（【]\s*(\d+):(\d{2})(?::(\d{2}))?\s*[)\]}）】]|(?:^|[\s—–-])(\d+):(\d{2})(?::(\d{2}))?(?=\s|$)/gm;
+// Fractional seconds (00:14.800) and ranges ([00:00.080 - 00:14.800]) are also
+// accepted: the range's own end time is remembered for the final segment.
+const TS = new RegExp(
+  "[(\\[{（【]\\s*(\\d+):(\\d{2})(?::(\\d{2}))?(?:[.,](\\d{1,3}))?" +
+    "(?:\\s*(?:-->|[-–—~])\\s*(\\d+):(\\d{2})(?::(\\d{2}))?(?:[.,](\\d{1,3}))?)?" +
+    "\\s*[)\\]}）】]" +
+    "|(?:^|[\\s—–-])(\\d+):(\\d{2})(?::(\\d{2}))?(?:[.,](\\d{1,3}))?(?=\\s|$)",
+  "gm",
+);
 
 /** Timeline frame rate. Every duration is quantised to this grid so the encoder
  * cannot drift: round(dur * FPS) is then always exact. */
@@ -22,13 +29,31 @@ export function quantise(t: number): number {
   return Math.round(t * FPS) / FPS;
 }
 
+function partsToSeconds(
+  a: string,
+  b: string,
+  c: string | undefined,
+  frac: string | undefined,
+): number {
+  const base =
+    c !== undefined
+      ? Number(a) * 3600 + Number(b) * 60 + Number(c)
+      : Number(a) * 60 + Number(b);
+  const ms = frac === undefined ? 0 : Number(frac.padEnd(3, "0")) / 1000;
+  return base + ms;
+}
+
 function toSeconds(m: RegExpExecArray): number {
   const bracketed = m[1] !== undefined;
-  const a = Number(bracketed ? m[1] : m[4]);
-  const b = Number(bracketed ? m[2] : m[5]);
-  const third = bracketed ? m[3] : m[6];
-  const c = third !== undefined ? Number(third) : null;
-  return c === null ? a * 60 + b : a * 3600 + b * 60 + c;
+  return bracketed
+    ? partsToSeconds(m[1]!, m[2]!, m[3], m[4])
+    : partsToSeconds(m[9]!, m[10]!, m[11], m[12]);
+}
+
+/** End time when the mark is a range like [00:00.080 - 00:14.800]. */
+function toEndSeconds(m: RegExpExecArray): number | null {
+  if (m[5] === undefined) return null;
+  return partsToSeconds(m[5]!, m[6]!, m[7], m[8]);
 }
 
 /**
@@ -40,8 +65,9 @@ export function scriptEndTime(raw: string): number {
   let end = 0;
   let m: RegExpExecArray | null;
   while ((m = TS.exec(raw)) !== null) {
-    const seconds = toSeconds(m);
-    if (Number.isFinite(seconds)) end = Math.max(end, seconds);
+    for (const seconds of [toSeconds(m), toEndSeconds(m)]) {
+      if (seconds !== null && Number.isFinite(seconds)) end = Math.max(end, seconds);
+    }
   }
   return quantise(end);
 }
