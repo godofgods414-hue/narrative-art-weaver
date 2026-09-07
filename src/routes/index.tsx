@@ -103,6 +103,25 @@ async function pool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>
   await Promise.all(workers);
 }
 
+/**
+ * One timestamp = one prompt.
+ *
+ * The prompt writer keeps a slot for every line and leaves a line it could not
+ * write EMPTY (instead of dropping it and shifting every later prompt onto the
+ * wrong timestamp). So an empty / whitespace-only prompt means "still missing":
+ * it stays in the repair loop and must never be sent to the image renderer.
+ */
+function hasPrompt(prompt?: string | null): boolean {
+  return typeof prompt === "string" && prompt.trim().length > 0;
+}
+
+/** Line numbers (1-based) that still have no prompt of their own. */
+function missingPromptLines(shots: Shot[]): number[] {
+  return shots.filter((s) => !hasPrompt(s.prompt)).map((s) => s.index + 1);
+}
+
+
+
 function Index() {
   const analyze = useServerFn(analyzeScript);
   const getPrompts = useServerFn(promptsForRange);
