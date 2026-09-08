@@ -122,21 +122,17 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
           "X-Title": "Script to Manga",
         },
         body: JSON.stringify({
-          model: MODELS[modelIdx],
+          model: MODEL,
           messages: [
             ...(opts.system ? [{ role: "system", content: opts.system }] : []),
             { role: "user", content: user },
           ],
           temperature: opts.temperature ?? 0.7,
-          // Every currently free model thinks before answering, and that
-          // thinking is spent from the same budget. Without generous headroom
-          // the reply is cut off DURING the thinking and no prompts ever
-          // arrive — which is exactly the failure this fixes. The per-model
-          // ceiling is respected because asking above it is a hard 400.
-          max_tokens: Math.min(
-            MAX_OUT[MODELS[modelIdx] as string] ?? 32_000,
-            (opts.maxOutputTokens ?? 32_000) * 3 + 8_000,
-          ),
+          // This model thinks before answering, and that thinking is spent
+          // from the same budget. Without generous headroom the reply is cut
+          // off DURING the thinking and no prompts ever arrive.
+          max_tokens: Math.min(MAX_OUT, (opts.maxOutputTokens ?? 32_000) * 3 + 8_000),
+
           // STREAMING IS REQUIRED for long answers: a buffered request that
           // sends no bytes for ~2 minutes is severed by the hosting platform,
           // which is exactly why long scripts produced no prompts at all.
