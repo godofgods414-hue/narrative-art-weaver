@@ -176,10 +176,11 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
       const body = (await res.text().catch(() => "")).slice(0, 600);
       lastErr = `${res.status} ${body}`;
 
-      if (modelGone(res.status, body)) {
-        advanceModel();
+      if (busy(res.status, body)) {
+        await sleep(2_000 * (attempt + 1));
         continue;
       }
+
 
       const handled = park(
         slot,
