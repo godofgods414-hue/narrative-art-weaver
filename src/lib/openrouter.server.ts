@@ -17,8 +17,39 @@ import { openrouterKeys } from "./keys.server";
 
 const API = "https://openrouter.ai/api/v1/chat/completions";
 
-/** The only model this app is allowed to call. */
-export const MODEL = "minimax/minimax-m3:free";
+/**
+ * FREE models only — the account has no credits, so a paid slug must never be
+ * requested. MiniMax M3 free was withdrawn by OpenRouter ("This model is
+ * unavailable for free"), which is why prompt writing stopped producing
+ * anything, so the app now works through a list of currently free models and
+ * moves to the next one whenever a model itself is unavailable or overloaded.
+ * Every entry is a long-context instruct model that handles Hindi/Hinglish.
+ */
+export const MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "google/gemma-4-31b-it:free",
+  "google/gemma-4-26b-a4b-it:free",
+] as const;
+
+let modelIdx = 0;
+
+/** The free model currently in use. */
+export const MODEL = MODELS[0];
+
+function advanceModel() {
+  modelIdx = (modelIdx + 1) % MODELS.length;
+}
+
+/** True when the failure is about the MODEL, not the key. */
+function modelGone(status: number, body: string): boolean {
+  return (
+    status === 404 ||
+    /unavailable for free|no (endpoints|allowed providers)|not a valid model|paid version is available|temporarily overloaded|Service temporarily/i.test(
+      body,
+    )
+  );
+}
 
 /**
  * Free models on OpenRouter allow ~20 requests/minute per key. A 3.5s gap per
