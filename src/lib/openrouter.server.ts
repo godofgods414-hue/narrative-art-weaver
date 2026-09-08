@@ -18,46 +18,29 @@ import { openrouterKeys } from "./keys.server";
 const API = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
- * FREE models only — the account has no credits, so a paid slug must never be
- * requested. MiniMax M3 free was withdrawn by OpenRouter ("This model is
- * unavailable for free"), which is why prompt writing stopped producing
- * anything, so the app now works through a list of currently free models and
- * moves to the next one whenever a model itself is unavailable or overloaded.
- * Every entry is a long-context instruct model that handles Hindi/Hinglish.
+ * ONE fixed free model — no fallback list.
+ *
+ * Switching between models mid-script made the writing style and formatting
+ * change from one batch to the next, so the app now stays on a single model
+ * that answers reliably (verified live: 3/3 complete answers, while the other
+ * free candidates were overloaded or withdrawn). Retries and key rotation
+ * still apply, but always against this same model.
  */
-export const MODELS = [
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "google/gemma-4-31b-it:free",
-  "google/gemma-4-26b-a4b-it:free",
-] as const;
+export const MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 
-/** Largest answer each model accepts. */
-const MAX_OUT: Record<string, number> = {
-  "nvidia/nemotron-3-super-120b-a12b:free": 200_000,
-  "nvidia/nemotron-3-ultra-550b-a55b:free": 60_000,
-  "google/gemma-4-31b-it:free": 32_000,
-  "google/gemma-4-26b-a4b-it:free": 32_000,
-};
+/** Largest answer this model accepts. */
+const MAX_OUT = 60_000;
 
-let modelIdx = 0;
-
-/** The free model currently in use. */
-export const MODEL = MODELS[0];
-
-function advanceModel() {
-  modelIdx = (modelIdx + 1) % MODELS.length;
-}
-
-/** True when the failure is about the MODEL, not the key. */
-function modelGone(status: number, body: string): boolean {
+/** True when the provider is momentarily busy — retry the same model. */
+function busy(status: number, body: string): boolean {
   return (
-    status === 404 ||
-    /unavailable for free|no (endpoints|allowed providers)|not a valid model|paid version is available|temporarily overloaded|Service temporarily/i.test(
-      body,
-    )
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    /temporarily overloaded|Service temporarily|Upstream error|Provider returned error/i.test(body)
   );
 }
+
 
 /**
  * Free models on OpenRouter allow ~20 requests/minute per key. A 3.5s gap per
@@ -149,21 +132,17 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
           "X-Title": "Script to Manga",
         },
         body: JSON.stringify({
-          model: MODELS[modelIdx],
+          model: MODEL,
           messages: [
             ...(opts.system ? [{ role: "system", content: opts.system }] : []),
             { role: "user", content: user },
           ],
           temperature: opts.temperature ?? 0.7,
-          // Every currently free model thinks before answering, and that
-          // thinking is spent from the same budget. Without generous headroom
-          // the reply is cut off DURING the thinking and no prompts ever
-          // arrive — which is exactly the failure this fixes. The per-model
-          // ceiling is respected because asking above it is a hard 400.
-          max_tokens: Math.min(
-            MAX_OUT[MODELS[modelIdx] as string] ?? 32_000,
-            (opts.maxOutputTokens ?? 32_000) * 3 + 8_000,
-          ),
+          // This model thinks before answering, and that thinking is spent
+          // from the same budget. Without generous headroom the reply is cut
+          // off DURING the thinking and no prompts ever arrive.
+          max_tokens: Math.min(MAX_OUT, (opts.maxOutputTokens ?? 32_000) * 3 + 8_000),
+
           // STREAMING IS REQUIRED for long answers: a buffered request that
           // sends no bytes for ~2 minutes is severed by the hosting platform,
           // which is exactly why long scripts produced no prompts at all.
@@ -186,12 +165,13 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
         // the auto-switch failure. Classify it exactly like an HTTP error.
         if (err) {
           lastErr = `${err.code ?? "error"} ${err.message ?? ""}`.trim();
-          // A model-level problem (withdrawn free model, overloaded provider)
-          // must switch MODEL, not blame the key.
-          if (modelGone(err.code ?? 0, err.message ?? "")) {
-            advanceModel();
+          // Provider busy: wait and try the SAME model again — never swap
+          // models, that is what made the writing inconsistent.
+          if (busy(err.code ?? 0, err.message ?? "")) {
+            await sleep(2_000 * (attempt + 1));
             continue;
           }
+
           const handled = park(slot, keys.length, err.code ?? 0, err.message ?? "", 0);
           if (handled === "stop") break;
           continue;
@@ -206,10 +186,11 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
       const body = (await res.text().catch(() => "")).slice(0, 600);
       lastErr = `${res.status} ${body}`;
 
-      if (modelGone(res.status, body)) {
-        advanceModel();
+      if (busy(res.status, body)) {
+        await sleep(2_000 * (attempt + 1));
         continue;
       }
+
 
       const handled = park(
         slot,
@@ -314,7 +295,7 @@ function earliestFree(keys: string[]): number {
 
 export function engineStatus(): { model: string; keyIndex: number; keys: number } {
   const keys = openrouterKeys();
-  return { model: MODELS[modelIdx] as string, keyIndex: keyIdx + 1, keys: keys.length };
+  return { model: MODEL, keyIndex: keyIdx + 1, keys: keys.length };
 }
 
 /**
