@@ -295,7 +295,7 @@ function earliestFree(keys: string[]): number {
 
 export function engineStatus(): { model: string; keyIndex: number; keys: number } {
   const keys = openrouterKeys();
-  return { model: MODELS[modelIdx] as string, keyIndex: keyIdx + 1, keys: keys.length };
+  return { model: MODEL, keyIndex: keyIdx + 1, keys: keys.length };
 }
 
 /**
