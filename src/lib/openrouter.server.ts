@@ -141,7 +141,7 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
           "X-Title": "Script to Manga",
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: MODELS[modelIdx],
           messages: [
             ...(opts.system ? [{ role: "system", content: opts.system }] : []),
             { role: "user", content: user },
@@ -172,6 +172,12 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
         // the auto-switch failure. Classify it exactly like an HTTP error.
         if (err) {
           lastErr = `${err.code ?? "error"} ${err.message ?? ""}`.trim();
+          // A model-level problem (withdrawn free model, overloaded provider)
+          // must switch MODEL, not blame the key.
+          if (modelGone(err.code ?? 0, err.message ?? "")) {
+            advanceModel();
+            continue;
+          }
           const handled = park(slot, keys.length, err.code ?? 0, err.message ?? "", 0);
           if (handled === "stop") break;
           continue;
@@ -185,6 +191,11 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
 
       const body = (await res.text().catch(() => "")).slice(0, 600);
       lastErr = `${res.status} ${body}`;
+
+      if (modelGone(res.status, body)) {
+        advanceModel();
+        continue;
+      }
 
       const handled = park(
         slot,
@@ -207,7 +218,7 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
     }
   }
 
-  throw new Error(`MiniMax M3 request failed: ${lastErr}`);
+  throw new Error(`Free writing model request failed: ${lastErr}`);
 }
 
 /**
@@ -289,7 +300,7 @@ function earliestFree(keys: string[]): number {
 
 export function engineStatus(): { model: string; keyIndex: number; keys: number } {
   const keys = openrouterKeys();
-  return { model: MODEL, keyIndex: keyIdx + 1, keys: keys.length };
+  return { model: MODELS[modelIdx] as string, keyIndex: keyIdx + 1, keys: keys.length };
 }
 
 /**
