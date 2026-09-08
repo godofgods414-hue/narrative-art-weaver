@@ -155,12 +155,13 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
         // the auto-switch failure. Classify it exactly like an HTTP error.
         if (err) {
           lastErr = `${err.code ?? "error"} ${err.message ?? ""}`.trim();
-          // A model-level problem (withdrawn free model, overloaded provider)
-          // must switch MODEL, not blame the key.
-          if (modelGone(err.code ?? 0, err.message ?? "")) {
-            advanceModel();
+          // Provider busy: wait and try the SAME model again — never swap
+          // models, that is what made the writing inconsistent.
+          if (busy(err.code ?? 0, err.message ?? "")) {
+            await sleep(2_000 * (attempt + 1));
             continue;
           }
+
           const handled = park(slot, keys.length, err.code ?? 0, err.message ?? "", 0);
           if (handled === "stop") break;
           continue;
