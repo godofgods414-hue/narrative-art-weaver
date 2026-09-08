@@ -45,3 +45,8 @@
       any timestamp has no prompt of its own
 - [x] All 5 writing keys stored as secrets and each verified 200 on MiniMax M3 (free)
 - [x] Long-script pass: 40 timestamps -> 40 prompts, no empty slots, no shifting, panel rendered
+
+- [x] Free writing model fixed: MiniMax M3 free was withdrawn by OpenRouter (404 "unavailable for free"),
+      which is why no prompts were written. Writing now runs on a list of currently free models
+      (Nemotron 3 Super 120B first, then Nemotron Ultra and Gemma 4) with automatic switch on
+      model-unavailable/overloaded, plus thinking-budget headroom so answers are never cut off.
