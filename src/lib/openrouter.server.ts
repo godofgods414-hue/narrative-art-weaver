@@ -31,6 +31,16 @@ export const MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 /** Largest answer this model accepts. */
 const MAX_OUT = 60_000;
 
+/** True when the provider is momentarily busy — retry the same model. */
+function busy(status: number, body: string): boolean {
+  return (
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    /temporarily overloaded|Service temporarily|Upstream error|Provider returned error/i.test(body)
+  );
+}
+
 
 /**
  * Free models on OpenRouter allow ~20 requests/minute per key. A 3.5s gap per
