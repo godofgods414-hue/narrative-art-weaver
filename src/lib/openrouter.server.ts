@@ -32,6 +32,14 @@ export const MODELS = [
   "google/gemma-4-26b-a4b-it:free",
 ] as const;
 
+/** Largest answer each model accepts. */
+const MAX_OUT: Record<string, number> = {
+  "nvidia/nemotron-3-super-120b-a12b:free": 200_000,
+  "nvidia/nemotron-3-ultra-550b-a55b:free": 60_000,
+  "google/gemma-4-31b-it:free": 32_000,
+  "google/gemma-4-26b-a4b-it:free": 32_000,
+};
+
 let modelIdx = 0;
 
 /** The free model currently in use. */
@@ -147,9 +155,11 @@ async function callOpenRouter(user: string, opts: ChatOptions): Promise<string> 
             { role: "user", content: user },
           ],
           temperature: opts.temperature ?? 0.7,
+          // Per-model answer ceiling: asking for more than a model allows is a
+          // hard 400, which would silently lose a whole batch of prompts.
           // MiniMax M3 answers up to ~264k tokens, so big batches fit in one
           // answer. Streaming keeps even the longest answer alive.
-          max_tokens: Math.min(240_000, opts.maxOutputTokens ?? 32_000),
+          max_tokens: Math.min(MAX_OUT[MODELS[modelIdx] as string] ?? 32_000, opts.maxOutputTokens ?? 32_000),
           // STREAMING IS REQUIRED for long answers: a buffered request that
           // sends no bytes for ~2 minutes is severed by the hosting platform,
           // which is exactly why long scripts produced no prompts at all.
